@@ -637,10 +637,13 @@ class _ChatPanelState extends State<_ChatPanel> {
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMessage> _messages = <_ChatMessage>[];
   bool _isSending = false;
+  bool _isUnlocking = false;
+  bool _isChatUnlocked = false;
 
   @override
   void initState() {
     super.initState();
+    _isChatUnlocked = !_chatService.requiresUnlock;
     _messages.add(
       const _ChatMessage(
         text: 'Ahoj, odpovedám o majiteľovi tohto portfólia.',
@@ -663,24 +666,58 @@ class _ChatPanelState extends State<_ChatPanel> {
         ),
       );
     }
-    if (!_chatService.isBotProtectionConfigured) {
-      _messages.add(
-        const _ChatMessage(
-          text:
-              'Chat na produkcii vyžaduje Turnstile ochranu. Nastav TURNSTILE_SITE_KEY.',
-          isUser: false,
-          isError: true,
-        ),
-      );
+    if (_chatService.requiresUnlock) {
+      _turnstileController.addListener(_handleTurnstileStateChanged);
+      if (_chatService.isUnlockConfigured) {
+        unawaited(_restoreUnlockState());
+      } else {
+        _messages.add(
+          const _ChatMessage(
+            text:
+                'Chat ochrana nie je správne nakonfigurovaná. Chýba TURNSTILE_SITE_KEY.',
+            isUser: false,
+            isError: true,
+          ),
+        );
+      }
     }
   }
 
   @override
   void dispose() {
+    _turnstileController.removeListener(_handleTurnstileStateChanged);
     _turnstileController.dispose();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _handleTurnstileStateChanged() {
+    if (!_chatService.requiresUnlock || _isChatUnlocked || _isUnlocking) {
+      return;
+    }
+
+    final token = _turnstileController.token?.trim() ?? '';
+    if (token.isEmpty) {
+      return;
+    }
+
+    unawaited(_completeUnlock(token));
+  }
+
+  Future<void> _restoreUnlockState() async {
+    try {
+      final unlocked = await _chatService.unlockStatus();
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isChatUnlocked = unlocked;
+      });
+    } catch (_) {
+      // Keep the chat locked until the user explicitly retries.
+    }
   }
 
   void _scrollToBottom() {
@@ -696,6 +733,66 @@ class _ChatPanelState extends State<_ChatPanel> {
     });
   }
 
+  void _startUnlockFlow() {
+    if (_isUnlocking || _isChatUnlocked) {
+      return;
+    }
+
+    if (!_chatService.isUnlockConfigured) {
+      _appendErrorMessage(
+        'Chat ochrana nie je správne nakonfigurovaná. Chýba TURNSTILE_SITE_KEY.',
+      );
+      return;
+    }
+
+    _turnstileController.ensureRendered();
+  }
+
+  Future<void> _completeUnlock(String turnstileToken) async {
+    if (_isUnlocking || _isChatUnlocked) {
+      return;
+    }
+
+    setState(() {
+      _isUnlocking = true;
+    });
+
+    try {
+      await _chatService.unlockChat(turnstileToken: turnstileToken);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isUnlocking = false;
+        _isChatUnlocked = true;
+      });
+    } on _BackendChatException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isUnlocking = false;
+      });
+      _appendErrorMessage(error.message);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isUnlocking = false;
+      });
+      _appendErrorMessage(
+        'Bezpečnostné overenie zlyhalo. Skús to prosím ešte raz.',
+      );
+    } finally {
+      _turnstileController.close();
+      _turnstileController.reset();
+    }
+  }
+
   Future<void> _sendMessage() async {
     final text = _inputController.text.trim();
     if (text.isEmpty || _isSending) {
@@ -709,23 +806,12 @@ class _ChatPanelState extends State<_ChatPanel> {
       return;
     }
 
-    if (!_chatService.isBotProtectionConfigured) {
-      _appendErrorMessage(
-        'Chýba TURNSTILE_SITE_KEY. Chat na produkcii je z bezpečnostných dôvodov vypnutý.',
-      );
-      return;
-    }
-
-    if (_chatService.requiresTurnstile && !_turnstileController.hasValidToken) {
-      _turnstileController.ensureRendered();
-      _appendErrorMessage(
-        'Dokonči bezpečnostnú kontrolu a potom odošli správu.',
-      );
+    if (_chatService.requiresUnlock && !_isChatUnlocked) {
+      _appendErrorMessage('Najprv klikni na Odomknúť chat.');
       return;
     }
 
     final canCallApi = _chatService.isConfigured;
-    final turnstileToken = _turnstileController.token;
     _inputController.clear();
 
     setState(() {
@@ -760,7 +846,6 @@ class _ChatPanelState extends State<_ChatPanel> {
       final reply = await _chatService.reply(
         messages: _messages.where((message) => !message.isTyping).toList(),
         profileContext: _profileContext,
-        turnstileToken: turnstileToken,
       );
       if (!mounted) {
         return;
@@ -816,10 +901,6 @@ class _ChatPanelState extends State<_ChatPanel> {
         );
         _isSending = false;
       });
-    } finally {
-      if (_chatService.requiresTurnstile) {
-        _turnstileController.reset();
-      }
     }
 
     _scrollToBottom();
@@ -841,8 +922,8 @@ class _ChatPanelState extends State<_ChatPanel> {
   @override
   Widget build(BuildContext context) {
     final canCallApi = _chatService.isConfigured;
-    final isChatConfigured =
-        canCallApi && _chatService.isBotProtectionConfigured;
+    final requiresUnlock = _chatService.requiresUnlock;
+    final canUseChat = canCallApi && (!requiresUnlock || _isChatUnlocked);
     return SizedBox(
       width: widget.width,
       height: widget.height,
@@ -956,91 +1037,85 @@ class _ChatPanelState extends State<_ChatPanel> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_chatService.requiresTurnstile &&
-                      _chatService.isBotProtectionConfigured) ...[
+                  if (requiresUnlock) ...[
                     AnimatedBuilder(
                       animation: _turnstileController,
                       builder: (context, _) {
                         final statusMessage = _turnstileController.statusMessage;
-                        final hasValidToken =
-                            _turnstileController.hasValidToken;
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
+                        final helperText = statusMessage ??
+                            (_isChatUnlocked
+                                ? 'Chat je odomknutý pre túto session.'
+                                : _isUnlocking
+                                    ? 'Dokončujem bezpečnostné overenie...'
+                                    : 'Pred prvou správou odomkni chat jedným overením.');
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceStrong,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.stroke),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _isChatUnlocked
+                                    ? Icons.lock_open_rounded
+                                    : Icons.shield_outlined,
+                                size: 16,
+                                color: _isChatUnlocked
+                                    ? AppColors.accentTeal
+                                    : AppColors.textSecondary,
                               ),
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceStrong,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: AppColors.stroke),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  helperText,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(
+                                        color: statusMessage != null
+                                            ? const Color(0xFFFFB4AB)
+                                            : AppColors.textSecondary,
+                                      ),
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    hasValidToken
-                                        ? Icons.verified_user_rounded
-                                        : Icons.shield_outlined,
-                                    size: 16,
-                                    color: hasValidToken
-                                        ? AppColors.accentTeal
-                                        : AppColors.textSecondary,
+                              if (!_isChatUnlocked) ...[
+                                const SizedBox(width: 8),
+                                TextButton(
+                                  onPressed:
+                                      _isUnlocking ? null : _startUnlockFlow,
+                                  child: Text(
+                                    _isUnlocking ? 'Čakám...' : 'Odomknúť chat',
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      statusMessage ??
-                                          (hasValidToken
-                                              ? 'Overenie pripravené. Môžeš písať a odoslať správu.'
-                                              : _turnstileController.isLoading
-                                                  ? 'Otváram bezpečnostné overenie...'
-                                                  : 'Pred prvým odoslaním otvor bezpečnostné overenie.'),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.copyWith(
-                                            color: statusMessage != null
-                                                ? const Color(0xFFFFB4AB)
-                                                : AppColors.textSecondary,
-                                          ),
-                                    ),
-                                  ),
-                                  if (!hasValidToken) ...[
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      onPressed: _isSending
-                                          ? null
-                                          : _turnstileController.ensureRendered,
-                                      child: const Text('Overiť'),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                          ],
+                                ),
+                              ],
+                            ],
+                          ),
                         );
                       },
                     ),
+                    const SizedBox(height: 10),
                   ],
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: _inputController,
-                          onSubmitted: isChatConfigured && !_isSending
+                          onSubmitted: canUseChat && !_isSending
                               ? (_) => _sendMessage()
                               : null,
-                          enabled: isChatConfigured && !_isSending,
+                          enabled: canUseChat && !_isSending,
                           style: Theme.of(context).textTheme.bodyMedium,
                           decoration: InputDecoration(
                             hintText: !canCallApi
                                 ? 'Spusti appku s CHAT_API_URL'
-                                : !_chatService.isBotProtectionConfigured
-                                    ? 'Nastav TURNSTILE_SITE_KEY'
+                                : requiresUnlock && !_isChatUnlocked
+                                    ? 'Najprv odomkni chat'
                                     : 'Napíš správu...',
                             hintStyle: Theme.of(context)
                                 .textTheme
@@ -1063,7 +1138,7 @@ class _ChatPanelState extends State<_ChatPanel> {
                       ),
                       const SizedBox(width: 8),
                       IconButton.filled(
-                        onPressed: isChatConfigured && !_isSending
+                        onPressed: canUseChat && !_isSending
                             ? _sendMessage
                             : null,
                         icon: const Icon(Icons.send_rounded),
@@ -1140,61 +1215,29 @@ class _BackendChatService {
 
   bool get isConfigured => _chatApiUrl.trim().isNotEmpty;
 
+  bool get requiresUnlock => !isLocalHost;
+
+  bool get isUnlockConfigured =>
+      !requiresUnlock || _turnstileSiteKey.trim().isNotEmpty;
+
   String get turnstileSiteKey => _turnstileSiteKey.trim();
 
-  bool get requiresTurnstile => !isLocalHost;
-
-  bool get isBotProtectionConfigured =>
-      !requiresTurnstile || turnstileSiteKey.isNotEmpty;
-
-  Future<String> reply({
-    required List<_ChatMessage> messages,
-    required String profileContext,
-    String? turnstileToken,
-  }) async {
-    if (!isConfigured) {
-      throw const _BackendChatException('Chýba CHAT_API_URL.');
-    }
-
+  Uri _requireChatUri() {
     final uri = Uri.tryParse(_chatApiUrl);
     if (uri == null) {
       throw const _BackendChatException(
         'CHAT_API_URL nie je platná URL adresa.',
       );
     }
+    return uri;
+  }
 
-    final payloadMessages = messages
-        .where((message) =>
-            !message.isTyping && !message.isError && message.text.isNotEmpty)
-        .map((message) => {
-              'role': message.isUser ? 'user' : 'assistant',
-              'text': message.text,
-            })
-        .toList();
+  Uri get _unlockUri {
+    final chatUri = _requireChatUri();
+    return chatUri.replace(path: '${chatUri.path}/unlock');
+  }
 
-    late final http.Response response;
-    try {
-      response = await http
-          .post(
-            uri,
-            headers: const {
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'messages': payloadMessages,
-              'profileContext': profileContext,
-              if ((turnstileToken ?? '').trim().isNotEmpty)
-                'turnstileToken': turnstileToken!.trim(),
-            }),
-          )
-          .timeout(const Duration(seconds: 30));
-    } on http.ClientException {
-      throw _BackendChatException(
-        'Nepodarilo sa spojiť s chat backendom na ${uri.toString()}. '
-        'Skontroluj, či backend beží a či endpoint povoľuje CORS.',
-      );
-    }
-
+  Map<String, dynamic> _decodeJsonResponse(http.Response response) {
     final responseText = utf8.decode(response.bodyBytes);
     dynamic decoded;
     try {
@@ -1221,6 +1264,78 @@ class _BackendChatService {
         'Backend chat proxy vrátil chybu (${response.statusCode}).',
       );
     }
+
+    return decoded;
+  }
+
+  Future<bool> unlockStatus() async {
+    final response = await http
+        .get(_unlockUri)
+        .timeout(const Duration(seconds: 15));
+    final decoded = _decodeJsonResponse(response);
+    final unlocked = decoded['unlocked'];
+    return unlocked == true;
+  }
+
+  Future<void> unlockChat({
+    required String turnstileToken,
+  }) async {
+    final response = await http
+        .post(
+          _unlockUri,
+          headers: const {
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'turnstileToken': turnstileToken,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    _decodeJsonResponse(response);
+  }
+
+  Future<String> reply({
+    required List<_ChatMessage> messages,
+    required String profileContext,
+  }) async {
+    if (!isConfigured) {
+      throw const _BackendChatException('Chýba CHAT_API_URL.');
+    }
+
+    final uri = _requireChatUri();
+
+    final payloadMessages = messages
+        .where((message) =>
+            !message.isTyping && !message.isError && message.text.isNotEmpty)
+        .map((message) => {
+              'role': message.isUser ? 'user' : 'assistant',
+              'text': message.text,
+            })
+        .toList();
+
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            uri,
+            headers: const {
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'messages': payloadMessages,
+              'profileContext': profileContext,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+    } on http.ClientException {
+      throw _BackendChatException(
+        'Nepodarilo sa spojiť s chat backendom na ${uri.toString()}. '
+        'Skontroluj, či backend beží a či endpoint povoľuje CORS.',
+      );
+    }
+
+    final decoded = _decodeJsonResponse(response);
 
     final reply = decoded['reply'];
     if (reply is String && reply.trim().isNotEmpty) {

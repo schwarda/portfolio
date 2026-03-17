@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 const DEFAULT_SYSTEM_PROMPT =
   'Si hlas majitela tohto portfolia. Odpovedaj vzdy o majitelovi portfolia a v jeho mene v 1. osobe (napr. "mam", "robim"). ' +
   'Nikdy o sebe nehovor ako o AI, asistentovi alebo modeli. Nikdy nepouzivaj metakomenty, interny postup ani uvahy; vrat len finalnu odpoved. ' +
@@ -46,10 +48,13 @@ function buildCorsHeaders(env) {
   };
 }
 
-function jsonResponse(status, body, env) {
+function jsonResponse(status, body, env, headers = {}) {
   return Response.json(body, {
     status,
-    headers: buildCorsHeaders(env),
+    headers: {
+      ...buildCorsHeaders(env),
+      ...headers,
+    },
   });
 }
 
@@ -146,6 +151,96 @@ async function parseJsonBody(request) {
 function parseIntegerEnv(value, fallback) {
   const parsed = Number.parseInt(`${value ?? ''}`, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function isChatUnlockEnforced(env) {
+  const explicit = `${env.CHAT_UNLOCK_ENFORCED ?? ''}`.trim().toLowerCase();
+  if (explicit) {
+    return explicit === 'true';
+  }
+
+  return `${env.TURNSTILE_SECRET_KEY ?? ''}`.trim().length > 0;
+}
+
+const UNLOCK_COOKIE_NAME = 'portfolio_chat_unlock';
+
+function signingSecret(env) {
+  return (
+    `${env.CHAT_UNLOCK_SECRET ?? ''}`.trim() ||
+    `${env.TURNSTILE_SECRET_KEY ?? ''}`.trim()
+  );
+}
+
+function signUnlockPayload(payload, env) {
+  const secret = signingSecret(env);
+  if (!secret) {
+    return '';
+  }
+
+  return crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+}
+
+function createUnlockCookie(env) {
+  const maxAge = parseIntegerEnv(env.CHAT_UNLOCK_TTL_SECONDS, 60 * 60 * 12);
+  const payload = Buffer.from(
+    JSON.stringify({
+      exp: Date.now() + maxAge * 1000,
+    }),
+  ).toString('base64url');
+  const signature = signUnlockPayload(payload, env);
+  return `${UNLOCK_COOKIE_NAME}=${payload}.${signature}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax; Secure`;
+}
+
+function parseCookies(request) {
+  const cookieHeader = request.headers.get('cookie') ?? '';
+  const cookies = {};
+
+  for (const chunk of cookieHeader.split(';')) {
+    const [rawKey, ...rawValue] = chunk.split('=');
+    const key = rawKey?.trim();
+    if (!key) {
+      continue;
+    }
+    cookies[key] = rawValue.join('=').trim();
+  }
+
+  return cookies;
+}
+
+function hasValidUnlockCookie(request, env) {
+  const token = parseCookies(request)[UNLOCK_COOKIE_NAME] ?? '';
+  if (!token) {
+    return false;
+  }
+
+  const [payload, signature] = token.split('.');
+  if (!payload || !signature) {
+    return false;
+  }
+
+  const expectedSignature = signUnlockPayload(payload, env);
+  if (!expectedSignature) {
+    return false;
+  }
+
+  const expectedBuffer = Buffer.from(expectedSignature);
+  const providedBuffer = Buffer.from(signature);
+  if (expectedBuffer.length !== providedBuffer.length) {
+    return false;
+  }
+
+  if (!crypto.timingSafeEqual(expectedBuffer, providedBuffer)) {
+    return false;
+  }
+
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(payload, 'base64url').toString('utf8'),
+    );
+    return typeof decoded.exp === 'number' && decoded.exp > Date.now();
+  } catch {
+    return false;
+  }
 }
 
 function normalizeHost(host) {
@@ -358,6 +453,7 @@ async function enforceRateLimit(env, request) {
 export async function handlePortfolioRequest(request, env = process.env) {
   const url = new URL(request.url);
   const localSecurityBypass = allowsLocalSecurityBypass(env, request);
+  const chatUnlockEnforced = isChatUnlockEnforced(env);
 
   if (request.method === 'OPTIONS') {
     return new Response(null, {
@@ -375,14 +471,71 @@ export async function handlePortfolioRequest(request, env = process.env) {
         provider: cfg.provider,
         hasApiKey: cfg.apiKey.length > 0,
         botProtectionConfigured:
-          localSecurityBypass || `${env.TURNSTILE_SECRET_KEY ?? ''}`.trim().length > 0,
+          localSecurityBypass ||
+          !chatUnlockEnforced ||
+          `${env.TURNSTILE_SECRET_KEY ?? ''}`.trim().length > 0,
         rateLimitConfigured:
           localSecurityBypass ||
           (`${env.UPSTASH_REDIS_REST_URL ?? ''}`.trim().length > 0 &&
             `${env.UPSTASH_REDIS_REST_TOKEN ?? ''}`.trim().length > 0),
+        chatUnlocked:
+          localSecurityBypass ||
+          !chatUnlockEnforced ||
+          hasValidUnlockCookie(request, env),
       },
       env,
     );
+  }
+
+  if (url.pathname === '/api/chat/unlock' && request.method === 'GET') {
+    return jsonResponse(
+      200,
+      {
+        unlocked:
+          localSecurityBypass ||
+          !chatUnlockEnforced ||
+          hasValidUnlockCookie(request, env),
+      },
+      env,
+    );
+  }
+
+  if (url.pathname === '/api/chat/unlock' && request.method === 'POST') {
+    if (localSecurityBypass || !chatUnlockEnforced) {
+      return jsonResponse(200, { unlocked: true }, env);
+    }
+
+    try {
+      const body = await parseJsonBody(request);
+      const turnstileToken =
+        typeof body.turnstileToken === 'string' ? body.turnstileToken.trim() : '';
+
+      const turnstileResult = await verifyTurnstileToken({
+        token: turnstileToken,
+        request,
+        env,
+      });
+      if (!turnstileResult.ok) {
+        return jsonResponse(
+          turnstileResult.status,
+          { error: turnstileResult.message },
+          env,
+        );
+      }
+
+      return jsonResponse(
+        200,
+        { unlocked: true },
+        env,
+        {
+          'Set-Cookie': createUnlockCookie(env),
+        },
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unexpected server error.';
+      return jsonResponse(500, { error: message }, env);
+    }
   }
 
   if (url.pathname !== '/api/chat' || request.method !== 'POST') {
@@ -405,8 +558,6 @@ export async function handlePortfolioRequest(request, env = process.env) {
     const input = normalizeMessages(body.messages);
     const profileContext =
       typeof body.profileContext === 'string' ? body.profileContext.trim() : '';
-    const turnstileToken =
-      typeof body.turnstileToken === 'string' ? body.turnstileToken.trim() : '';
 
     if (input.length === 0) {
       return jsonResponse(
@@ -420,24 +571,22 @@ export async function handlePortfolioRequest(request, env = process.env) {
     }
 
     if (!localSecurityBypass) {
+      if (chatUnlockEnforced && !hasValidUnlockCookie(request, env)) {
+        return jsonResponse(
+          403,
+          {
+            error:
+              'Chat je zamknutý. Najprv dokonči bezpečnostné overenie.',
+          },
+          env,
+        );
+      }
+
       const rateLimitResult = await enforceRateLimit(env, request);
       if (!rateLimitResult.ok) {
         return jsonResponse(
           rateLimitResult.status,
           { error: rateLimitResult.message },
-          env,
-        );
-      }
-
-      const turnstileResult = await verifyTurnstileToken({
-        token: turnstileToken,
-        request,
-        env,
-      });
-      if (!turnstileResult.ok) {
-        return jsonResponse(
-          turnstileResult.status,
-          { error: turnstileResult.message },
           env,
         );
       }

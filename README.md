@@ -60,9 +60,9 @@ curl http://127.0.0.1:8787/health
 
 This repo is prepared for a single-domain Vercel deploy:
 - Flutter web is built to `build/web`
-- Vercel serves serverless functions from `api/chat.mjs` and `api/health.mjs`
+- Vercel serves serverless functions from `api/chat.mjs`, `api/chat/unlock.mjs`, and `api/health.mjs`
 - On production, frontend calls relative `/api/chat`, so do not set `CHAT_API_URL` for same-domain deploys
-- Chat on production requires Cloudflare Turnstile and Upstash Redis rate limiting before the model call
+- Chat on production requires one-time Cloudflare Turnstile unlock plus Upstash Redis rate limiting before the model call
 
 Required Vercel environment variables:
 ```bash
@@ -77,6 +77,8 @@ AI_PROVIDER=groq
 Optional Vercel environment variables:
 ```bash
 TURNSTILE_ALLOWED_HOSTNAME=your-domain.com
+CHAT_UNLOCK_SECRET=replace-with-random-secret
+CHAT_UNLOCK_TTL_SECONDS=43200
 RATE_LIMIT_CHAT_PER_MINUTE=6
 RATE_LIMIT_CHAT_PER_HOUR=40
 OPENAI_API_KEY=sk-...
@@ -95,4 +97,5 @@ Recommended dashboard step after deploy:
 
 - Client no longer needs API key.
 - In production, keep keys only in server environment variables.
+- Turnstile runs once per browser session and unlocks chat through a signed cookie set by `/api/chat/unlock`.
 - Interny AI kontext o majitelovi portfolia sa sklada v [lib/main.dart](/Users/lopkart/Documents/portfolio/lib/main.dart) cez `internalProfileNotes` a neposiela sa do UI, iba do chat promptu.
