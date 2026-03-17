@@ -10,6 +10,7 @@ abstract class TurnstileController extends ChangeNotifier {
 
   bool get hasValidToken => isLocalBypass || ((token ?? '').trim().isNotEmpty);
 
+  void updateLocaleCode(String localeCode);
   void ensureRendered();
   void reset();
   void close();

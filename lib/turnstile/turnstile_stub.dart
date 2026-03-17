@@ -9,6 +9,7 @@ class _StubTurnstileController extends TurnstileController {
   }) : _isEnabled = siteKey.trim().isNotEmpty;
 
   final bool _isEnabled;
+  String _localeCode = 'en';
 
   @override
   final bool isLocalBypass;
@@ -28,13 +29,23 @@ class _StubTurnstileController extends TurnstileController {
       return null;
     }
     if (!_isEnabled) {
-      return 'Turnstile nie je nakonfigurovaný.';
+      return _localeCode == 'sk'
+          ? 'Turnstile nie je nakonfigurovaný.'
+          : 'Turnstile is not configured.';
     }
-    return 'Turnstile funguje iba vo web buildoch.';
+    return _localeCode == 'sk'
+        ? 'Turnstile funguje iba vo webových buildoch.'
+        : 'Turnstile works only in web builds.';
   }
 
   @override
   String? get token => null;
+
+  @override
+  void updateLocaleCode(String localeCode) {
+    _localeCode = localeCode.toLowerCase().startsWith('sk') ? 'sk' : 'en';
+    notifyListeners();
+  }
 
   @override
   void ensureRendered() {}

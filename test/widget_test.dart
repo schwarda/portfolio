@@ -3,10 +3,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:about_me_portfolio/main.dart';
 
 void main() {
-  testWidgets('Portfolio hero renders', (WidgetTester tester) async {
+  testWidgets('Portfolio hero renders in English by default',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const PortfolioApp());
 
-    expect(find.text('Flutter Portfolio'), findsOneWidget);
-    expect(find.text('Ahoj, som Tvoje Meno'), findsOneWidget);
+    expect(find.text('Portfolio'), findsOneWidget);
+    expect(find.text('Hello, I am Dávid'), findsOneWidget);
+  });
+
+  testWidgets('Language switch updates the portfolio copy',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const PortfolioApp());
+
+    await tester.tap(find.text('SK'));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('Dobrý deň, som Dávid'), findsOneWidget);
+    expect(find.text('Čomu sa venujem'), findsOneWidget);
   });
 }

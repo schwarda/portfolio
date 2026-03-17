@@ -10,6 +10,11 @@ import 'turnstile_interface.dart';
 
 int _turnstileCounter = 0;
 
+enum _TurnstileStatus {
+  expired,
+  loadError,
+}
+
 class _WebTurnstileController extends TurnstileController {
   _WebTurnstileController({
     required this.siteKey,
@@ -33,7 +38,8 @@ class _WebTurnstileController extends TurnstileController {
   bool _isLoading = false;
   int _attempts = 0;
   String? _token;
-  String? _statusMessage;
+  String _localeCode = 'en';
+  _TurnstileStatus? _status;
 
   @override
   bool get isEnabled => siteKey.trim().isNotEmpty;
@@ -48,7 +54,20 @@ class _WebTurnstileController extends TurnstileController {
   String? get token => _token;
 
   @override
-  String? get statusMessage => _statusMessage;
+  String? get statusMessage {
+    switch (_status) {
+      case _TurnstileStatus.expired:
+        return _localeCode == 'sk'
+            ? 'Bezpečnostný token expiroval. Overenie sa obnovuje.'
+            : 'The security token expired. Verification is refreshing.';
+      case _TurnstileStatus.loadError:
+        return _localeCode == 'sk'
+            ? 'Antibot ochranu sa nepodarilo načítať. Obnovte stránku a skúste to znova.'
+            : 'The anti-bot protection could not be loaded. Refresh the page and try again.';
+      case null:
+        return null;
+    }
+  }
 
   String? _detailString(Object? detail, String property) {
     if (detail == null) {
@@ -78,7 +97,7 @@ class _WebTurnstileController extends TurnstileController {
           return;
         }
         _token = _detailString(detail, 'token');
-        _statusMessage = null;
+        _status = null;
         notifyListeners();
       },
     );
@@ -92,7 +111,7 @@ class _WebTurnstileController extends TurnstileController {
           return;
         }
         _token = null;
-        _statusMessage = 'Bezpečnostný token expiroval. Overenie sa obnovuje.';
+        _status = _TurnstileStatus.expired;
         notifyListeners();
       },
     );
@@ -106,8 +125,7 @@ class _WebTurnstileController extends TurnstileController {
           return;
         }
         _token = null;
-        _statusMessage =
-            'Antibot ochrana sa nepodarila načítať. Obnov stránku a skús to znova.';
+        _status = _TurnstileStatus.loadError;
         notifyListeners();
       },
     );
@@ -127,6 +145,17 @@ class _WebTurnstileController extends TurnstileController {
     } catch (_) {
       return null;
     }
+  }
+
+  @override
+  void updateLocaleCode(String localeCode) {
+    final normalized = localeCode.toLowerCase().startsWith('sk') ? 'sk' : 'en';
+    if (_localeCode == normalized) {
+      return;
+    }
+
+    _localeCode = normalized;
+    notifyListeners();
   }
 
   @override
@@ -151,12 +180,13 @@ class _WebTurnstileController extends TurnstileController {
       return;
     }
 
-    final rendered = helper.callMethod('open', [_containerId, siteKey]) == true;
+    final rendered =
+        helper.callMethod('open', [_containerId, siteKey, _localeCode]) == true;
 
     if (rendered) {
       _isRendered = true;
       _isLoading = false;
-      _statusMessage = null;
+      _status = null;
       _startTokenPolling();
       notifyListeners();
       return;
@@ -170,8 +200,7 @@ class _WebTurnstileController extends TurnstileController {
     _attempts += 1;
     if (_attempts >= 10) {
       _isLoading = false;
-      _statusMessage =
-          'Antibot ochrana sa nepodarila načítať. Obnov stránku a skús to znova.';
+      _status = _TurnstileStatus.loadError;
       notifyListeners();
       return;
     }
@@ -197,12 +226,13 @@ class _WebTurnstileController extends TurnstileController {
       return;
     }
 
-    final token = helper.callMethod('getToken', [_containerId])?.toString() ?? '';
+    final token =
+        helper.callMethod('getToken', [_containerId])?.toString() ?? '';
     final normalizedToken = token.trim();
 
     if (normalizedToken.isNotEmpty && normalizedToken != (_token ?? '')) {
       _token = normalizedToken;
-      _statusMessage = null;
+      _status = null;
       notifyListeners();
       return;
     }
@@ -216,6 +246,7 @@ class _WebTurnstileController extends TurnstileController {
   @override
   void reset() {
     _token = null;
+    _status = null;
     if (!isEnabled || isLocalBypass) {
       notifyListeners();
       return;

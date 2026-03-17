@@ -17,30 +17,102 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta
+    name="description"
+    content="Portfolio of Dávid Schwartz, frontend developer focused on web, mobile, UX, and performance."
+  >
+  <meta name="theme-color" content="#08111A">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Dávid Schwartz Portfolio">
+  <meta
+    property="og:description"
+    content="Frontend portfolio focused on web, mobile, UX, and performance."
+  >
+  <meta property="og:image" content="share-card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Dávid Schwartz Portfolio">
+  <meta
+    name="twitter:description"
+    content="Frontend portfolio focused on web, mobile, UX, and performance."
+  >
+  <meta name="twitter:image" content="share-card.png">
   <script
     src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
     defer
   ></script>
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: #08111A;
+      overscroll-behavior: none;
+    }
+
+    body {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    flutter-view,
+    flt-glass-pane {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+    }
+  </style>
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="about_me_portfolio">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Dávid Schwartz Portfolio">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>about_me_portfolio</title>
+  <title>Dávid Schwartz Portfolio</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
   <script>
     window.portfolioTurnstile = {
-      ensureModal: function () {
+      copyFor: function (localeCode) {
+        var isSlovak = String(localeCode || '').toLowerCase().indexOf('sk') === 0;
+        if (isSlovak) {
+          return {
+            title: 'Bezpečnostné overenie',
+            text: 'Dokončite overenie a potom odošlite správu.',
+            close: 'Zavrieť'
+          };
+        }
+        return {
+          title: 'Security verification',
+          text: 'Complete the verification and then send your message.',
+          close: 'Close'
+        };
+      },
+      updateCopy: function (localeCode) {
+        var copy = window.portfolioTurnstile.copyFor(localeCode);
+        var title = document.getElementById('portfolio-turnstile-title');
+        var text = document.getElementById('portfolio-turnstile-text');
+        var close = document.getElementById('portfolio-turnstile-close');
+        if (title) title.textContent = copy.title;
+        if (text) text.textContent = copy.text;
+        if (close) close.textContent = copy.close;
+      },
+      ensureModal: function (localeCode) {
         if (document.getElementById('portfolio-turnstile-overlay')) {
+          window.portfolioTurnstile.updateCopy(localeCode);
           return;
         }
 
@@ -65,7 +137,7 @@
         card.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.42)';
 
         var title = document.createElement('div');
-        title.textContent = 'Bezpečnostné overenie';
+        title.id = 'portfolio-turnstile-title';
         title.style.color = '#f3f7fb';
         title.style.fontFamily = 'sans-serif';
         title.style.fontWeight = '700';
@@ -73,7 +145,7 @@
         title.style.marginBottom = '8px';
 
         var text = document.createElement('div');
-        text.textContent = 'Dokonči overenie a potom odošli správu.';
+        text.id = 'portfolio-turnstile-text';
         text.style.color = 'rgba(243, 247, 251, 0.72)';
         text.style.fontFamily = 'sans-serif';
         text.style.fontSize = '14px';
@@ -85,7 +157,7 @@
 
         var close = document.createElement('button');
         close.type = 'button';
-        close.textContent = 'Zavrieť';
+        close.id = 'portfolio-turnstile-close';
         close.style.marginTop = '14px';
         close.style.padding = '10px 14px';
         close.style.borderRadius = '10px';
@@ -103,13 +175,14 @@
         card.appendChild(close);
         overlay.appendChild(card);
         document.body.appendChild(overlay);
+        window.portfolioTurnstile.updateCopy(localeCode);
       },
-      open: function (containerId, siteKey) {
+      open: function (containerId, siteKey, localeCode) {
         if (!siteKey || !window.turnstile) {
           return false;
         }
 
-        window.portfolioTurnstile.ensureModal();
+        window.portfolioTurnstile.ensureModal(localeCode);
         var overlay = document.getElementById('portfolio-turnstile-overlay');
         var slot = document.getElementById('portfolio-turnstile-slot');
         if (!overlay || !slot) return false;
