@@ -1,11 +1,5 @@
-import { handlePortfolioRequest } from '../server/chat-core.mjs';
+import { handleVercelRoute } from '../server/vercel-route.mjs';
 
-export default async function handler(request) {
-  const url = new URL(request.url);
-  url.pathname = '/api/chat';
-
-  return handlePortfolioRequest(
-    new Request(url, request),
-    process.env,
-  );
+export default async function handler(req, res) {
+  return handleVercelRoute(req, res, '/api/chat');
 }
