@@ -23,6 +23,8 @@ if [ ! -x "$FLUTTER_BIN" ]; then
   FLUTTER_BIN="$FLUTTER_CACHE_DIR/bin/flutter"
 fi
 
+git config --global --add safe.directory "$FLUTTER_CACHE_DIR"
+
 "$FLUTTER_BIN" --version
 "$FLUTTER_BIN" pub get
 
