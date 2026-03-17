@@ -7,10 +7,5 @@
       "source": "/health",
       "destination": "/api/health"
     }
-  ],
-  "functions": {
-    "api/*.mjs": {
-      "runtime": "nodejs22.x"
-    }
-  }
+  ]
 }
