@@ -964,76 +964,61 @@ class _ChatPanelState extends State<_ChatPanel> {
                         final statusMessage = _turnstileController.statusMessage;
                         final hasValidToken =
                             _turnstileController.hasValidToken;
-                        final showExpandedChallenge =
-                            !hasValidToken || statusMessage != null;
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (showExpandedChallenge)
-                              Container(
-                                width: double.infinity,
-                                constraints: const BoxConstraints(minHeight: 66),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceStrong,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: AppColors.stroke),
-                                ),
-                                child: buildTurnstileView(
-                                  controller: _turnstileController,
-                                ),
-                              )
-                            else
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceStrong,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: AppColors.stroke),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.verified_user_rounded,
-                                      size: 16,
-                                      color: AppColors.accentTeal,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Overenie pripravené, správu môžeš odoslať.',
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceStrong,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppColors.stroke),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    hasValidToken
+                                        ? Icons.verified_user_rounded
+                                        : Icons.shield_outlined,
+                                    size: 16,
+                                    color: hasValidToken
+                                        ? AppColors.accentTeal
+                                        : AppColors.textSecondary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      statusMessage ??
+                                          (hasValidToken
+                                              ? 'Overenie pripravené. Môžeš písať a odoslať správu.'
+                                              : _turnstileController.isLoading
+                                                  ? 'Otváram bezpečnostné overenie...'
+                                                  : 'Pred prvým odoslaním otvor bezpečnostné overenie.'),
                                       style: Theme.of(context)
                                           .textTheme
                                           .labelSmall
                                           ?.copyWith(
-                                            color: AppColors.textSecondary,
+                                            color: statusMessage != null
+                                                ? const Color(0xFFFFB4AB)
+                                                : AppColors.textSecondary,
                                           ),
                                     ),
-                                  ],
-                                ),
-                              ),
-                            const SizedBox(height: 6),
-                            Text(
-                              statusMessage ??
-                                  (hasValidToken
-                                      ? 'Bezpečnostná kontrola pripravená.'
-                                      : _turnstileController.isLoading
-                                          ? 'Načítavam bezpečnostnú kontrolu...'
-                                          : 'Pred odoslaním správy potvrď, že nie si bot.'),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelSmall
-                                  ?.copyWith(
-                                    color: statusMessage != null
-                                        ? const Color(0xFFFFB4AB)
-                                        : AppColors.textSecondary,
                                   ),
+                                  if (!hasValidToken) ...[
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: _isSending
+                                          ? null
+                                          : _turnstileController.ensureRendered,
+                                      child: const Text('Overiť'),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 10),
                           ],

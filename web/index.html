@@ -39,15 +39,88 @@
 <body>
   <script>
     window.portfolioTurnstile = {
-      render: function (containerId, siteKey) {
+      ensureModal: function () {
+        if (document.getElementById('portfolio-turnstile-overlay')) {
+          return;
+        }
+
+        var overlay = document.createElement('div');
+        overlay.id = 'portfolio-turnstile-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.inset = '0';
+        overlay.style.display = 'none';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.background = 'rgba(5, 11, 20, 0.72)';
+        overlay.style.backdropFilter = 'blur(8px)';
+        overlay.style.zIndex = '2147483647';
+        overlay.style.padding = '16px';
+
+        var card = document.createElement('div');
+        card.style.width = 'min(420px, 100%)';
+        card.style.background = '#101825';
+        card.style.border = '1px solid rgba(113, 146, 179, 0.35)';
+        card.style.borderRadius = '18px';
+        card.style.padding = '16px';
+        card.style.boxShadow = '0 24px 60px rgba(0, 0, 0, 0.42)';
+
+        var title = document.createElement('div');
+        title.textContent = 'Bezpečnostné overenie';
+        title.style.color = '#f3f7fb';
+        title.style.fontFamily = 'sans-serif';
+        title.style.fontWeight = '700';
+        title.style.fontSize = '18px';
+        title.style.marginBottom = '8px';
+
+        var text = document.createElement('div');
+        text.textContent = 'Dokonči overenie a potom odošli správu.';
+        text.style.color = 'rgba(243, 247, 251, 0.72)';
+        text.style.fontFamily = 'sans-serif';
+        text.style.fontSize = '14px';
+        text.style.marginBottom = '14px';
+
+        var slot = document.createElement('div');
+        slot.id = 'portfolio-turnstile-slot';
+        slot.style.minHeight = '70px';
+
+        var close = document.createElement('button');
+        close.type = 'button';
+        close.textContent = 'Zavrieť';
+        close.style.marginTop = '14px';
+        close.style.padding = '10px 14px';
+        close.style.borderRadius = '10px';
+        close.style.border = '1px solid rgba(113, 146, 179, 0.35)';
+        close.style.background = '#152131';
+        close.style.color = '#f3f7fb';
+        close.style.cursor = 'pointer';
+        close.onclick = function () {
+          overlay.style.display = 'none';
+        };
+
+        card.appendChild(title);
+        card.appendChild(text);
+        card.appendChild(slot);
+        card.appendChild(close);
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+      },
+      open: function (containerId, siteKey) {
         if (!siteKey || !window.turnstile) {
           return false;
         }
 
-        var container = document.getElementById(containerId);
-        if (!container) {
-          return false;
-        }
+        window.portfolioTurnstile.ensureModal();
+        var overlay = document.getElementById('portfolio-turnstile-overlay');
+        var slot = document.getElementById('portfolio-turnstile-slot');
+        if (!overlay || !slot) return false;
+
+        overlay.style.display = 'flex';
+        slot.innerHTML = '';
+
+        var container = document.createElement('div');
+        container.id = containerId;
+        container.dataset.token = '';
+        slot.appendChild(container);
 
         if (container.dataset.widgetId) {
           try {
@@ -55,15 +128,13 @@
           } catch (_) {}
         }
 
-        container.innerHTML = '';
-        container.dataset.token = '';
-
         var widgetId = window.turnstile.render('#' + containerId, {
           sitekey: siteKey,
           theme: 'dark',
           size: 'flexible',
           callback: function (token) {
             container.dataset.token = token;
+            overlay.style.display = 'none';
             window.dispatchEvent(
               new CustomEvent('portfolio-turnstile-token', {
                 detail: { containerId: containerId, token: token }
@@ -107,6 +178,12 @@
         }
 
         return container.dataset.token || '';
+      },
+      close: function () {
+        var overlay = document.getElementById('portfolio-turnstile-overlay');
+        if (overlay) {
+          overlay.style.display = 'none';
+        }
       }
     };
   </script>

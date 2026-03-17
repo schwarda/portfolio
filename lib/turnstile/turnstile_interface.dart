@@ -12,4 +12,5 @@ abstract class TurnstileController extends ChangeNotifier {
 
   void ensureRendered();
   void reset();
+  void close();
 }

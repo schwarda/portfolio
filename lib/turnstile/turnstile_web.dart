@@ -3,7 +3,6 @@
 import 'dart:async';
 import 'dart:html' as html;
 import 'dart:js' as js;
-import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/widgets.dart';
 
@@ -15,12 +14,7 @@ class _WebTurnstileController extends TurnstileController {
   _WebTurnstileController({
     required this.siteKey,
     required this.isLocalBypass,
-  })  : _containerId = 'portfolio-turnstile-${_turnstileCounter++}',
-        _viewType = 'portfolio-turnstile-view-${_turnstileCounter++}' {
-    ui_web.platformViewRegistry.registerViewFactory(
-      _viewType,
-      (viewId) => _element,
-    );
+  }) : _containerId = 'portfolio-turnstile-${_turnstileCounter++}' {
     _subscribeToWindowEvents();
   }
 
@@ -28,11 +22,6 @@ class _WebTurnstileController extends TurnstileController {
   @override
   final bool isLocalBypass;
   final String _containerId;
-  final String _viewType;
-  final html.DivElement _element = html.DivElement()
-    ..style.width = '100%'
-    ..style.minHeight = '68px'
-    ..style.display = 'block';
 
   StreamSubscription<html.Event>? _tokenSubscription;
   StreamSubscription<html.Event>? _expiredSubscription;
@@ -142,11 +131,10 @@ class _WebTurnstileController extends TurnstileController {
 
   @override
   void ensureRendered() {
-    if (_isDisposed || isLocalBypass || !isEnabled || _isRendered) {
+    if (_isDisposed || isLocalBypass || !isEnabled) {
       return;
     }
 
-    _element.id = _containerId;
     _isLoading = true;
     notifyListeners();
     _renderOrRetry();
@@ -163,7 +151,7 @@ class _WebTurnstileController extends TurnstileController {
       return;
     }
 
-    final rendered = helper.callMethod('render', [_containerId, siteKey]) == true;
+    final rendered = helper.callMethod('open', [_containerId, siteKey]) == true;
 
     if (rendered) {
       _isRendered = true;
@@ -241,6 +229,14 @@ class _WebTurnstileController extends TurnstileController {
   }
 
   @override
+  void close() {
+    final helper = _helperObject;
+    if (helper != null) {
+      helper.callMethod('close');
+    }
+  }
+
+  @override
   void dispose() {
     _isDisposed = true;
     _retryTimer?.cancel();
@@ -272,7 +268,7 @@ class _TurnstileHtmlViewState extends State<_TurnstileHtmlView> {
 
   @override
   Widget build(BuildContext context) {
-    return HtmlElementView(viewType: widget.controller._viewType);
+    return const SizedBox.shrink();
   }
 }
 

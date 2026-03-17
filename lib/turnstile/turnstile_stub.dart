@@ -41,6 +41,9 @@ class _StubTurnstileController extends TurnstileController {
 
   @override
   void reset() {}
+
+  @override
+  void close() {}
 }
 
 TurnstileController createTurnstileController({
