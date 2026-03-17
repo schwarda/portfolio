@@ -9,6 +9,11 @@ void main() {
 
     expect(find.text('Portfolio'), findsOneWidget);
     expect(find.text('Hello, I am Dávid'), findsOneWidget);
+    expect(
+      find.text(
+          'Hello, this chat responds as Dávid Schwartz’s portfolio agent.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Language switch updates the portfolio copy',
@@ -20,5 +25,9 @@ void main() {
 
     expect(find.text('Dobrý deň, som Dávid'), findsOneWidget);
     expect(find.text('Čomu sa venujem'), findsOneWidget);
+    expect(
+      find.text('Dobrý deň, odpovedám ako agent portfólia Dávida Schwartza.'),
+      findsOneWidget,
+    );
   });
 }

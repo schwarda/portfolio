@@ -287,6 +287,16 @@ class _AboutMePageState extends State<AboutMePage> {
                                 height: 360,
                               ),
                             ],
+                            const SizedBox(height: 28),
+                            Text(
+                              l10n.vibeCodedNote,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelLarge
+                                  ?.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                            ),
                           ],
                         );
                       },
@@ -465,13 +475,15 @@ class _HeroSection extends StatelessWidget {
     );
 
     if (isDesktop) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(flex: 6, child: intro),
-          const SizedBox(width: 16),
-          Expanded(flex: 4, child: profile),
-        ],
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(flex: 6, child: intro),
+            const SizedBox(width: 16),
+            Expanded(flex: 4, child: profile),
+          ],
+        ),
       );
     }
 
@@ -997,9 +1009,13 @@ class _ChatPanelState extends State<_ChatPanel> {
     super.didChangeDependencies();
     final l10n = AppLocalizations.of(context);
     final localeCode = l10n.locale.languageCode;
+    final localeChanged = _localeCode != null && _localeCode != localeCode;
     if (_localeCode != localeCode) {
       _localeCode = localeCode;
       _turnstileController.updateLocaleCode(localeCode);
+      if (localeChanged) {
+        _refreshSeedMessagesIfPossible(l10n);
+      }
     }
 
     if (_hasInitializedMessages) {
@@ -1007,42 +1023,64 @@ class _ChatPanelState extends State<_ChatPanel> {
     }
 
     _hasInitializedMessages = true;
-    _messages.add(
+    _messages.addAll(_buildSeedMessages(l10n));
+
+    if (_chatService.requiresUnlock && _chatService.isUnlockConfigured) {
+      unawaited(_restoreUnlockState(l10n));
+    }
+  }
+
+  List<_ChatMessage> _buildSeedMessages(AppLocalizations l10n) {
+    final seedMessages = <_ChatMessage>[
       _ChatMessage(
         text: l10n.chatIntroLineOne,
         isUser: false,
+        isLocalizedSeed: true,
       ),
-    );
-    _messages.add(
       _ChatMessage(
         text: l10n.chatIntroLineTwo,
         isUser: false,
+        isLocalizedSeed: true,
       ),
-    );
+    ];
 
     if (!_chatService.isConfigured) {
-      _messages.add(
+      seedMessages.add(
         _ChatMessage(
           text: l10n.chatNeedsBackendEndpoint,
           isUser: false,
           isError: true,
+          isLocalizedSeed: true,
         ),
       );
     }
 
-    if (_chatService.requiresUnlock) {
-      if (_chatService.isUnlockConfigured) {
-        unawaited(_restoreUnlockState(l10n));
-      } else {
-        _messages.add(
-          _ChatMessage(
-            text: l10n.chatProtectionMisconfigured,
-            isUser: false,
-            isError: true,
-          ),
-        );
-      }
+    if (_chatService.requiresUnlock && !_chatService.isUnlockConfigured) {
+      seedMessages.add(
+        _ChatMessage(
+          text: l10n.chatProtectionMisconfigured,
+          isUser: false,
+          isError: true,
+          isLocalizedSeed: true,
+        ),
+      );
     }
+
+    return seedMessages;
+  }
+
+  void _refreshSeedMessagesIfPossible(AppLocalizations l10n) {
+    final canRefresh = _messages.isNotEmpty &&
+        _messages.every((message) => message.isLocalizedSeed);
+    if (!canRefresh) {
+      return;
+    }
+
+    setState(() {
+      _messages
+        ..clear()
+        ..addAll(_buildSeedMessages(l10n));
+    });
   }
 
   @override
@@ -1551,12 +1589,14 @@ class _ChatMessage {
     required this.isUser,
     this.isTyping = false,
     this.isError = false,
+    this.isLocalizedSeed = false,
   });
 
   final String text;
   final bool isUser;
   final bool isTyping;
   final bool isError;
+  final bool isLocalizedSeed;
 }
 
 class _BackendChatService {
@@ -2268,6 +2308,10 @@ class AppLocalizations {
       ? 'CV sa nepodarilo otvoriť.'
       : 'The resume could not be opened.';
 
+  String get vibeCodedNote => isSlovak
+      ? 'Táto stránka bola celá vibe coded.'
+      : 'This site was fully vibe coded.';
+
   String get languageOptionSk => 'SK';
 
   String get languageOptionEn => 'EN';
@@ -2532,6 +2576,16 @@ const _internalProfileNotesSk = [
   'Absolvoval uznávaný UX/UI kurz od SUXA: https://www.suxa.sk/uvod-do-ux',
   'Ako freelancer pre Novú Jar vyvíja mobilnú aplikáciu pre komunitu, podcasty, e-knihy a eventy, ktorú môže ukázať na pohovore.',
   'Pri technických odpovediach je vhodné zdôrazňovať pragmatický prístup, dopad na UX a udržateľnosť riešenia.',
+  'Preferuje pracovný pomer ako zamestnanec a ideálne 100 % home office.',
+  'Platové očakávanie je približne 2 500 až 3 000 EUR brutto mesačne.',
+  'Má skúsenosti s agilným vývojom a Scrumom.',
+  'Pri práci zvyčajne najprv zanalyzuje problém písomne alebo pomocou diagramu, potom ho rozdelí na menšie tasky.',
+  'Veľkosť tasku sa snaží držať približne na jeden deň práce; ak je väčší, rozdelí ho na ešte menšie časti.',
+  'Profesijne sa vníma ako medior frontend developer.',
+  'Projekty rád ukáže na pohovore alebo pri úvodnom kontakte, ak o ne bude záujem.',
+  'Používal napríklad Flutter, Dart, Riverpod, go_router, Firebase, Firestore, Firebase Storage, Firebase Analytics, Secure Storage, REST API, HTTP, epubx, flutter_inappwebview, share_plus, url_launcher, just_audio, Next.js, React, TypeScript, Sanity, GROQ, Styled Components, Tailwind CSS, Zod, Resend, Google Fonts, Vercel, GitHub Actions, Codex, GitHub Copilot a Grok.',
+  'Pri otázkach na knižnice a nástroje má odpovedať stručným reprezentatívnym výberom; celý zoznam má rozpisovať len na výslovné vyžiadanie.',
+  'Ak odpoveď nie je v profile, má uviesť, že Dávid na ňu rád odpovie na pohovore.',
   'Vo voľnom čase sa venuje cvičeniu s vlastnou váhou aj činkami, vareniu a lietaniu s dronom.',
   'Zaujímavosťou je zoskok z lietadla zo štyroch kilometrov, hoci pri pracovných témach to nebýva podstatné.',
   'Medzi silné stránky patrí analytické myslenie, schopnosť hľadať netradičné riešenia a dôraz na detail.',
@@ -2554,6 +2608,16 @@ const _internalProfileNotesEn = [
   'He completed a respected UX/UI course by SUXA: https://www.suxa.sk/uvod-do-ux',
   'As a freelancer for Nova Jar, he is building a mobile app for a community, podcasts, e-books, and events, which he can present during interviews.',
   'In technical answers, it is useful to emphasise his pragmatic approach, UX impact, and long-term maintainability.',
+  'He prefers full-time employment and ideally 100% remote work from home.',
+  'His salary expectation is roughly EUR 2,500 to 3,000 gross per month.',
+  'He has experience with agile development and Scrum.',
+  'When working on a problem, he usually starts by analysing it in writing or by drawing a diagram and then breaks it down into smaller tasks.',
+  'He tries to keep tasks to roughly one day of work; if a task grows beyond that, he splits it into smaller parts.',
+  'He sees himself professionally as a mid-level frontend developer.',
+  'He is happy to present his projects during an interview or early contact if there is interest.',
+  'He has worked with tools and libraries such as Flutter, Dart, Riverpod, go_router, Firebase, Firestore, Firebase Storage, Firebase Analytics, Secure Storage, REST APIs, HTTP, epubx, flutter_inappwebview, share_plus, url_launcher, just_audio, Next.js, React, TypeScript, Sanity, GROQ, Styled Components, Tailwind CSS, Zod, Resend, Google Fonts, Vercel, GitHub Actions, Codex, GitHub Copilot, and Grok.',
+  'When asked about libraries and tools, he should provide a concise representative summary instead of dumping the full list unless detailed enumeration is explicitly requested.',
+  'If an answer is not in the profile, the response should say that Dávid will be happy to answer it during an interview.',
   'In his free time, he enjoys bodyweight training, weights, cooking, and flying drones.',
   'A personal detail: he has completed a skydive from four kilometres, although that is not usually relevant in professional discussions.',
   'His strengths include analytical thinking, an ability to find unconventional solutions, and strong attention to detail.',
