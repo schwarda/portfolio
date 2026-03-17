@@ -962,29 +962,66 @@ class _ChatPanelState extends State<_ChatPanel> {
                       animation: _turnstileController,
                       builder: (context, _) {
                         final statusMessage = _turnstileController.statusMessage;
+                        final hasValidToken =
+                            _turnstileController.hasValidToken;
+                        final showExpandedChallenge =
+                            !hasValidToken || statusMessage != null;
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: double.infinity,
-                              constraints: const BoxConstraints(minHeight: 66),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 6,
+                            if (showExpandedChallenge)
+                              Container(
+                                width: double.infinity,
+                                constraints: const BoxConstraints(minHeight: 66),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceStrong,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppColors.stroke),
+                                ),
+                                child: buildTurnstileView(
+                                  controller: _turnstileController,
+                                ),
+                              )
+                            else
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceStrong,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppColors.stroke),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.verified_user_rounded,
+                                      size: 16,
+                                      color: AppColors.accentTeal,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Overenie pripravené, správu môžeš odoslať.',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: AppColors.textSecondary,
+                                          ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceStrong,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: AppColors.stroke),
-                              ),
-                              child: buildTurnstileView(
-                                controller: _turnstileController,
-                              ),
-                            ),
                             const SizedBox(height: 6),
                             Text(
                               statusMessage ??
-                                  (_turnstileController.hasValidToken
+                                  (hasValidToken
                                       ? 'Bezpečnostná kontrola pripravená.'
                                       : _turnstileController.isLoading
                                           ? 'Načítavam bezpečnostnú kontrolu...'
