@@ -1239,6 +1239,19 @@ class _BackendChatService {
 
   Map<String, dynamic> _decodeJsonResponse(http.Response response) {
     final responseText = utf8.decode(response.bodyBytes);
+    final vercelMitigation = response.headers['x-vercel-mitigated'];
+    final looksLikeVercelChallenge =
+        vercelMitigation == 'challenge' ||
+        responseText.contains('Vercel Security Checkpoint') ||
+        responseText.contains('x-vercel-challenge-token');
+
+    if (looksLikeVercelChallenge) {
+      throw const _BackendChatException(
+        'Vercel Firewall blokuje chat API challenge stránkou. '
+        'Vo Vercel projekte prepni Bot Protection na Log Only alebo sprav Bypass rule pre /api/chat a /api/chat/unlock.',
+      );
+    }
+
     dynamic decoded;
     try {
       decoded = jsonDecode(responseText);

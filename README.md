@@ -91,7 +91,8 @@ FLUTTER_VERSION=3.29.2
 Vercel config lives in [vercel.json](/Users/lopkart/Documents/portfolio/vercel.json) and the build script in [scripts/vercel-build.sh](/Users/lopkart/Documents/portfolio/scripts/vercel-build.sh).
 
 Recommended dashboard step after deploy:
-- enable Vercel Firewall Bot Protection in challenge mode for the site
+- if you use Vercel Firewall Bot Protection, do not challenge `/api/chat` and `/api/chat/unlock`
+- safest setup for this project: keep Bot Protection in `Log Only` for chat API routes and rely on Turnstile + Upstash rate limit there
 
 ## Notes
 
