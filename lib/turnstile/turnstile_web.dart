@@ -38,6 +38,7 @@ class _WebTurnstileController extends TurnstileController {
   StreamSubscription<html.Event>? _expiredSubscription;
   StreamSubscription<html.Event>? _errorSubscription;
   Timer? _retryTimer;
+  Timer? _tokenPollTimer;
   bool _isRendered = false;
   bool _isDisposed = false;
   bool _isLoading = false;
@@ -168,6 +169,7 @@ class _WebTurnstileController extends TurnstileController {
       _isRendered = true;
       _isLoading = false;
       _statusMessage = null;
+      _startTokenPolling();
       notifyListeners();
       return;
     }
@@ -189,6 +191,40 @@ class _WebTurnstileController extends TurnstileController {
     _retryTimer = Timer(const Duration(milliseconds: 300), _renderOrRetry);
   }
 
+  void _startTokenPolling() {
+    _tokenPollTimer?.cancel();
+    _tokenPollTimer = Timer.periodic(
+      const Duration(milliseconds: 400),
+      (_) => _syncTokenFromDom(),
+    );
+  }
+
+  void _syncTokenFromDom() {
+    if (_isDisposed) {
+      return;
+    }
+
+    final helper = _helperObject;
+    if (helper == null) {
+      return;
+    }
+
+    final token = helper.callMethod('getToken', [_containerId])?.toString() ?? '';
+    final normalizedToken = token.trim();
+
+    if (normalizedToken.isNotEmpty && normalizedToken != (_token ?? '')) {
+      _token = normalizedToken;
+      _statusMessage = null;
+      notifyListeners();
+      return;
+    }
+
+    if (normalizedToken.isEmpty && (_token ?? '').isNotEmpty) {
+      _token = null;
+      notifyListeners();
+    }
+  }
+
   @override
   void reset() {
     _token = null;
@@ -208,6 +244,7 @@ class _WebTurnstileController extends TurnstileController {
   void dispose() {
     _isDisposed = true;
     _retryTimer?.cancel();
+    _tokenPollTimer?.cancel();
     _tokenSubscription?.cancel();
     _expiredSubscription?.cancel();
     _errorSubscription?.cancel();

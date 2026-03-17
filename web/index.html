@@ -56,12 +56,14 @@
         }
 
         container.innerHTML = '';
+        container.dataset.token = '';
 
         var widgetId = window.turnstile.render('#' + containerId, {
           sitekey: siteKey,
           theme: 'dark',
           size: 'flexible',
           callback: function (token) {
+            container.dataset.token = token;
             window.dispatchEvent(
               new CustomEvent('portfolio-turnstile-token', {
                 detail: { containerId: containerId, token: token }
@@ -69,6 +71,7 @@
             );
           },
           'expired-callback': function () {
+            container.dataset.token = '';
             window.dispatchEvent(
               new CustomEvent('portfolio-turnstile-expired', {
                 detail: { containerId: containerId }
@@ -76,6 +79,7 @@
             );
           },
           'error-callback': function () {
+            container.dataset.token = '';
             window.dispatchEvent(
               new CustomEvent('portfolio-turnstile-error', {
                 detail: { containerId: containerId }
@@ -93,7 +97,16 @@
           return;
         }
 
+        container.dataset.token = '';
         window.turnstile.reset(container.dataset.widgetId);
+      },
+      getToken: function (containerId) {
+        var container = document.getElementById(containerId);
+        if (!container) {
+          return '';
+        }
+
+        return container.dataset.token || '';
       }
     };
   </script>
