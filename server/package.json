@@ -1,0 +1,9 @@
+{
+  "name": "about-me-chat-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs",
+    "dev": "node --watch index.mjs"
+  }
+}
