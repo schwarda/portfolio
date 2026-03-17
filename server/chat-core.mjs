@@ -153,6 +153,39 @@ function parseIntegerEnv(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function normalizeHostname(value) {
+  return `${value ?? ''}`
+    .trim()
+    .toLowerCase()
+    .replace(/\.$/, '')
+    .replace(/:\d+$/, '');
+}
+
+function hostnameVariants(hostname) {
+  const normalized = normalizeHostname(hostname);
+  if (!normalized) {
+    return [];
+  }
+
+  if (normalized.startsWith('www.')) {
+    return [normalized, normalized.slice(4)];
+  }
+
+  return [normalized, `www.${normalized}`];
+}
+
+function configuredTurnstileHostnames(env) {
+  const raw = `${env.TURNSTILE_ALLOWED_HOSTNAMES ?? env.TURNSTILE_ALLOWED_HOSTNAME ?? ''}`.trim();
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split(',')
+    .map((item) => normalizeHostname(item))
+    .filter(Boolean);
+}
+
 function isChatUnlockEnforced(env) {
   const explicit = `${env.CHAT_UNLOCK_ENFORCED ?? ''}`.trim().toLowerCase();
   if (explicit) {
@@ -347,14 +380,27 @@ async function verifyTurnstileToken({ token, request, env }) {
     };
   }
 
-  const expectedHostname = `${env.TURNSTILE_ALLOWED_HOSTNAME ?? ''}`.trim().toLowerCase();
-  const actualHostname = `${verification.hostname ?? ''}`.trim().toLowerCase();
-  if (expectedHostname && actualHostname && actualHostname !== expectedHostname) {
-    return {
-      ok: false,
-      status: 403,
-      message: 'Bezpečnostný token nepatrí tejto doméne.',
-    };
+  const expectedHostnames = configuredTurnstileHostnames(env);
+  if (expectedHostnames.length > 0) {
+    const actualHostname = normalizeHostname(verification.hostname);
+    if (!actualHostname) {
+      return {
+        ok: false,
+        status: 403,
+        message: 'Bezpečnostný token neobsahuje hostname.',
+      };
+    }
+
+    const allowed = new Set(
+      expectedHostnames.flatMap((hostname) => hostnameVariants(hostname)),
+    );
+    if (!allowed.has(actualHostname)) {
+      return {
+        ok: false,
+        status: 403,
+        message: 'Bezpečnostný token nepatrí tejto doméne.',
+      };
+    }
   }
 
   return { ok: true };

@@ -77,6 +77,7 @@ AI_PROVIDER=groq
 Optional Vercel environment variables:
 ```bash
 TURNSTILE_ALLOWED_HOSTNAME=your-domain.com
+TURNSTILE_ALLOWED_HOSTNAMES=your-domain.com,www.your-domain.com
 CHAT_UNLOCK_SECRET=replace-with-random-secret
 CHAT_UNLOCK_TTL_SECONDS=43200
 RATE_LIMIT_CHAT_PER_MINUTE=6
