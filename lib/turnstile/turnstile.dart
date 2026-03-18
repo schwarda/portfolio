@@ -3,8 +3,8 @@ import 'package:flutter/widgets.dart';
 export 'turnstile_interface.dart';
 
 import 'turnstile_interface.dart';
-import 'turnstile_stub.dart'
-    if (dart.library.html) 'turnstile_web.dart' as impl;
+import 'turnstile_stub.dart' if (dart.library.html) 'turnstile_web.dart'
+    as impl;
 
 TurnstileController createTurnstileController({
   required String siteKey,

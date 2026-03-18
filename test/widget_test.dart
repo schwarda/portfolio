@@ -1,11 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:about_me_portfolio/app/app_dependencies.dart';
 import 'package:about_me_portfolio/main.dart';
 
 void main() {
   testWidgets('Portfolio hero renders in English by default',
       (WidgetTester tester) async {
-    await tester.pumpWidget(const PortfolioApp());
+    await tester.pumpWidget(
+      PortfolioApp(
+        dependencies: AppDependencies.create(),
+      ),
+    );
 
     expect(find.text('Portfolio'), findsOneWidget);
     expect(find.text('Hello, I am Dávid'), findsOneWidget);
@@ -18,7 +23,11 @@ void main() {
 
   testWidgets('Language switch updates the portfolio copy',
       (WidgetTester tester) async {
-    await tester.pumpWidget(const PortfolioApp());
+    await tester.pumpWidget(
+      PortfolioApp(
+        dependencies: AppDependencies.create(),
+      ),
+    );
 
     await tester.tap(find.text('SK'));
     await tester.pump(const Duration(milliseconds: 250));
